@@ -128,7 +128,7 @@ while True:
             player_stats.goals_scored = goals
             player_stats.assists = assists
         else:
-            if player_stats.games_played == games:
+            if player_stats.games_played != games:
                     goals_scored_today = int(goals) - int(player_stats.goals_scored)
                     assists_today = int(assists) - int(player_stats.assists)
                     player_stats.games_played = games
