@@ -2,14 +2,45 @@ import urllib.request
 from bs4 import BeautifulSoup
 import time
 import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import os
 from twilio.rest import Client
+from dotenv import load_dotenv
+from requests import Request, Session, hooks
+from twilio.http.http_client import TwilioHttpClient
+from twilio.http.response import Response
 
-email = 'nhlprospectsdata@gmail.com'
-password = 'nikitadrozdovs8'
-send_to_email = 'ndrozdovs@icloud.com'
-subject = 'Prospect Update'
+
+class MyRequestClass(TwilioHttpClient):
+    def __init__(self):
+        self.response = None
+
+    def request(self, method, url, params=None, data=None, headers=None, auth=None, timeout=None,
+                allow_redirects=False):
+        # Here you can change the URL, headers and other request parameters
+        kwargs = {
+            'method': method.upper(),
+            'url': url,
+            'params': params,
+            'data': data,
+            'headers': headers,
+            'auth': auth,
+        }
+
+        session = Session()
+        request = Request(**kwargs)
+
+        prepped_request = session.prepare_request(request)
+        session.proxies.update({
+            'http': os.getenv('HTTP_PROXY'),
+            'https': os.getenv('HTTPS_PROXY')
+        })
+        response = session.send(
+            prepped_request,
+            allow_redirects=allow_redirects,
+            timeout=timeout,
+        )
+
+        return Response(int(response.status_code), response.text)
 
 
 class PlayerStats:
@@ -18,6 +49,13 @@ class PlayerStats:
     goals_scored = 0
     assists = 0
 
+
+load_dotenv()
+
+# Custom HTTP Class
+my_request_client = MyRequestClass()
+client = Client(os.getenv("ACCOUNT_SID"), os.getenv("AUTH_TOKEN"),
+                http_client=my_request_client)
 
 Pelletier = 'https://www.eliteprospects.com/player/410525/jakob-pelletier'
 Nikolayev = 'https://www.eliteprospects.com/player/514152/ilya-nikolayev'
@@ -83,41 +121,28 @@ while True:
         goals = goals.text.strip()
         assists = assists.text.strip()
         points = points.text.strip()
-        # print(player_name)
-        # print("Games Played:", games)
-        # print("Goals Scored:", goals)
-        # print("Assists:", assists)
-        # print("Total Points:", points, "\n")
 
-        # if initial == 0:
-        player_stats.name = player_name
-        player_stats.games_played = games
-        player_stats.goals_scored = goals
-        player_stats.assists = assists
-        # else:
-        if player_stats.games_played == games:
-                goals_scored_today = int(goals) - int(player_stats.goals_scored)
-                assists_today = int(assists) - int(player_stats.assists)
-                player_stats.games_played = games
-                player_stats.goals_scored = goals
-                player_stats.assists = assists
+        if initial == 0:
+            player_stats.name = player_name
+            player_stats.games_played = games
+            player_stats.goals_scored = goals
+            player_stats.assists = assists
+        else:
+            if player_stats.games_played == games:
+                    goals_scored_today = int(goals) - int(player_stats.goals_scored)
+                    assists_today = int(assists) - int(player_stats.assists)
+                    player_stats.games_played = games
+                    player_stats.goals_scored = goals
+                    player_stats.assists = assists
 
-                body = "Today, {} scored {} goals and got {} assists.\n He now has {} goals and {} assists total in {} games."\
-                    .format(player_name, goals_scored_today, assists_today, goals, assists, games)
+                    body_text = "Today, {} scored {} goals and got {} assists.\n He now has {} goals and {} assists total in {} games."\
+                        .format(player_name, goals_scored_today, assists_today, goals, assists, games)
 
-                msg = MIMEMultipart()
-                msg['From'] = email
-                msg['To'] = send_to_email
-                msg['Subject'] = subject
-
-                msg.attach(MIMEText(body))
-
-                server = smtplib.SMTP('smtp.gmail.com', 587)
-                server.starttls()
-                server.login(email, password)
-                text = msg.as_string()
-                server.sendmail(email, send_to_email, text)
-                server.quit()
+                    message = client.messages.create(
+                                body=body_text,
+                                from_='+16043302390',
+                                to='+14038038374'
+                    )
 
     initial = 1
     time.sleep(600)
